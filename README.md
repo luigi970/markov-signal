@@ -1,4 +1,4 @@
-# Activo Markov Dashboard
+# Markov Signal Dashboard
 
 Dashboard de análisis de **regímenes de mercado** con **Modelos Ocultos de Markov (HMM)**, construido en Streamlit.
 
