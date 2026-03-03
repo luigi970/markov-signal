@@ -1,0 +1,13 @@
+
+============================================================
+SISTEMA DE DIAGNÓSTICO MARKOV: KO - 2026-03-03 07:16
+============================================================
+Régimen 0: DESANGRADO LENTO (La trampa) (Ret: -0.529% | Vol: 1.26%)
+Régimen 1: ALCISTA SALUDABLE (Camino despejado) (Ret: 0.558% | Vol: 1.14%)
+Régimen 2: EUFORIA ARRIESGADA (Subida con miedo) (Ret: 0.228% | Vol: 2.36%)
+------------------------------------------------------------
+ESTADO ACTUAL: EUFORIA ARRIESGADA (Subida con miedo)
+CONFIANZA: 100.00%
+PREDICCIÓN MAÑANA: Probable salto a 'EUFORIA ARRIESGADA (Subida con miedo)'
+Persistencia esperada: 1.8 días.
+============================================================
