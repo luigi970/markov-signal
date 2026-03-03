@@ -135,6 +135,20 @@ st.markdown("""
         animation: introFade 0.8s ease-out;
     }
 
+    /* Alertas legibles sobre fondos claros (warning/info/success/error) */
+    div[data-testid="stAlert"] {
+        color: var(--text-main) !important;
+    }
+    div[data-testid="stAlert"] p,
+    div[data-testid="stAlert"] span,
+    div[data-testid="stAlert"] div {
+        color: var(--text-main) !important;
+    }
+    div[data-testid="stAlert"] svg {
+        color: var(--text-main) !important;
+        fill: var(--text-main) !important;
+    }
+
     @keyframes introFade {
         from {
             opacity: 0;
