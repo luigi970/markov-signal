@@ -354,7 +354,7 @@ if df is not None:
         """
     )
 
-    st.write("### Señal Operativa (beta)")
+    st.write("### Señal Operativa")
     if estado_pred_row["Sesgo"] == "Alcista" and estado_pred_row["Riesgo"] == "Bajo" and confianza >= 0.55:
         st.success(
             f"Sesgo operativo: **Comprar / Aumentar exposición**. "
