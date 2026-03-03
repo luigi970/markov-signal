@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import time
 from hmmlearn.hmm import GaussianHMM
 from sklearn.preprocessing import StandardScaler
 import plotly.graph_objects as go
@@ -160,12 +161,38 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- LÓGICA DEL MODELO ---
+def _download_with_retry(ticker, period, interval="1d", retries=3, base_delay=2):
+    last_error = None
+    for attempt in range(retries):
+        try:
+            df = yf.download(
+                ticker,
+                period=period,
+                interval=interval,
+                progress=False,
+                auto_adjust=False,
+                threads=False,
+            )
+            if df is not None and not df.empty:
+                return df, None
+        except Exception as e:
+            last_error = str(e)
+            if "YFRateLimitError" in last_error or "Too Many Requests" in last_error:
+                time.sleep(base_delay * (attempt + 1))
+                continue
+            return None, last_error
+
+        time.sleep(base_delay * (attempt + 1))
+
+    return None, last_error or "No se pudieron descargar datos."
+
+
 @st.cache_data(ttl=3600)
 def get_data(ticker, period="5y"):
     try:
-        df = yf.download(ticker, period=period, interval="1d", progress=False)
+        df, download_error = _download_with_retry(ticker, period=period, interval="1d")
         if df.empty:
-            return None
+            return None, download_error or "Sin datos para el ticker solicitado."
 
         # yfinance puede devolver columnas MultiIndex; construimos un DataFrame limpio.
         close = df['Close'].iloc[:, 0] if isinstance(df['Close'], pd.DataFrame) else df['Close']
@@ -184,9 +211,11 @@ def get_data(ticker, period="5y"):
         clean_df['Range'] = (clean_df['High'] - clean_df['Low']) / clean_df['Close']
         clean_df['Vol_Change'] = clean_df['Volume'].pct_change()
         clean_df.dropna(subset=['Close', 'High', 'Low', 'Volume', 'Returns', 'Range', 'Vol_Change'], inplace=True)
-        return clean_df
-    except Exception:
-        return None
+        if clean_df.empty:
+            return None, "Datos insuficientes luego de limpieza."
+        return clean_df, None
+    except Exception as e:
+        return None, str(e)
 
 def train_markov(df, n_states=3):
     features = ['Returns', 'Range', 'Vol_Change']
@@ -273,7 +302,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-df = get_data(ticker, periodo)
+df, data_error = get_data(ticker, periodo)
 
 if df is not None:
     model, scaler, perfiles = train_markov(df, n_estados)
@@ -529,4 +558,10 @@ if df is not None:
         st.code("\n".join(resumen), language="text")
 
 else:
-    st.error(f"No se pudieron obtener datos para el ticker {ticker}. Verifica que sea correcto.")
+    if data_error and ("YFRateLimitError" in data_error or "Too Many Requests" in data_error):
+        st.warning(
+            "Yahoo Finance limitó temporalmente las consultas (rate limit). "
+            "Esperá 1-2 minutos y volvé a intentar."
+        )
+    else:
+        st.error(f"No se pudieron obtener datos para el ticker {ticker}. Verifica que sea correcto.")
