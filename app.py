@@ -442,31 +442,43 @@ if df is not None:
     fig.update_layout(
         height=600, 
         template="plotly_white",
-        paper_bgcolor='rgba(0,0,0,0)', 
-        plot_bgcolor='rgba(0,0,0,0)',
-        font=dict(color='#14213d'),
+        paper_bgcolor='rgba(255,255,255,0.96)', 
+        plot_bgcolor='rgba(255,255,255,0.98)',
+        font=dict(color='#0f172a', size=15),
+        title_font=dict(color='#0f172a', size=24),
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(
             title="Regímenes",
-            bgcolor="rgba(255,255,255,0.65)",
-            bordercolor="rgba(20,33,61,0.15)",
-            borderwidth=1
+            font=dict(color='#0f172a', size=16),
+            title_font=dict(color='#0f172a', size=17),
+            bgcolor="rgba(255,255,255,0.97)",
+            bordercolor="rgba(15,23,42,0.35)",
+            borderwidth=1.2
         )
     )
-    fig.update_xaxes(showgrid=True, gridcolor="rgba(20,33,61,0.08)")
+    fig.update_xaxes(
+        showgrid=True,
+        gridcolor="rgba(15,23,42,0.16)",
+        tickfont=dict(color='#0f172a', size=13),
+        title_font=dict(color='#0f172a', size=14)
+    )
     fig.update_yaxes(
         row=1,
         col=1,
         tickformat=",.2f",
         showgrid=True,
-        gridcolor="rgba(20,33,61,0.08)"
+        gridcolor="rgba(15,23,42,0.16)",
+        tickfont=dict(color='#0f172a', size=13),
+        title_font=dict(color='#0f172a', size=14)
     )
     fig.update_yaxes(
         row=2,
         col=1,
         tickformat=",.2f",
         showgrid=True,
-        gridcolor="rgba(20,33,61,0.08)"
+        gridcolor="rgba(15,23,42,0.16)",
+        tickfont=dict(color='#0f172a', size=13),
+        title_font=dict(color='#0f172a', size=14)
     )
     st.plotly_chart(fig, width="stretch")
 
