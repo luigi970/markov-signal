@@ -135,6 +135,28 @@ st.markdown("""
         animation: introFade 0.8s ease-out;
     }
 
+    /* Tabs: contraste alto en seleccionada y no seleccionadas */
+    .stTabs [role="tablist"] {
+        gap: 10px;
+    }
+    .stTabs [role="tab"] {
+        color: #334155 !important;
+        background: rgba(255,255,255,0.85) !important;
+        border: 1px solid rgba(15,23,42,0.15) !important;
+        border-radius: 10px 10px 0 0 !important;
+        padding: 8px 14px !important;
+        font-weight: 600 !important;
+    }
+    .stTabs [role="tab"]:hover {
+        color: #0f172a !important;
+        background: rgba(255,255,255,0.98) !important;
+    }
+    .stTabs [role="tab"][aria-selected="true"] {
+        color: #0f172a !important;
+        background: #ffffff !important;
+        border-bottom: 2px solid var(--brand) !important;
+    }
+
     /* Alertas legibles sobre fondos claros (warning/info/success/error) */
     div[data-testid="stAlert"] {
         color: var(--text-main) !important;
