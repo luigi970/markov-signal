@@ -90,6 +90,30 @@ st.markdown("""
         color: var(--text-muted) !important;
         font-weight: 600 !important;
     }
+    section[data-testid="stSidebar"] details,
+    section[data-testid="stSidebar"] details * {
+        color: #0f172a !important;
+    }
+    section[data-testid="stSidebar"] details summary,
+    section[data-testid="stSidebar"] details summary * {
+        color: var(--brand-soft) !important;
+    }
+    section[data-testid="stSidebar"] details summary,
+    section[data-testid="stSidebar"] details summary:hover,
+    section[data-testid="stSidebar"] details summary:focus,
+    section[data-testid="stSidebar"] details summary:active {
+        background: transparent !important;
+        color: var(--brand-soft) !important;
+        filter: none !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {
+        background: transparent !important;
+    }
+    section[data-testid="stSidebar"] details p,
+    section[data-testid="stSidebar"] details li,
+    section[data-testid="stSidebar"] details span {
+        color: #0f172a !important;
+    }
     .sidebar-brand {
         color: var(--brand);
         font-size: 1.25rem;
@@ -557,6 +581,13 @@ def show_light_dataframe(df, hide_index=True):
     html = df.to_html(index=not hide_index, classes="light-table", border=0, escape=False)
     st.markdown(f'<div class="light-table-wrap">{html}</div>', unsafe_allow_html=True)
 
+
+def table_title(title, help_text):
+    st.markdown(
+        f'### {title} <span class="help-dot-small" title="{help_text}">i</span>',
+        unsafe_allow_html=True,
+    )
+
 # --- SIDEBAR ---
 st.sidebar.markdown('<div class="sidebar-brand">Markov Signal</div>', unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sidebar-config-title">Configuracion</div>', unsafe_allow_html=True)
@@ -631,6 +662,12 @@ st.sidebar.info(
     "- Robusta: para decidir mejor (mas lenta, mas confiable).\n"
     "- Si la confianza sale baja, tomalo como neutral."
 )
+with st.sidebar.expander("Glosario rapido"):
+    st.markdown(
+        "- **Estado (R0, R1...)**: codigo interno del modelo para agrupar comportamientos parecidos.\n"
+        "- **Regimen**: nombre entendible del estado (por ejemplo: alcista, bajista, lateral).\n"
+        "- **Frecuencia OOS**: porcentaje de apariciones en datos de prueba no vistos por el modelo (Out Of Sample)."
+    )
 
 if timeframe in ("1h", "4h"):
     st.sidebar.caption("En intradia, 'Prediccion de manana' se interpreta como 'proxima vela'.")
@@ -946,19 +983,28 @@ if df is not None:
 
     with tabs[0]:
         if model_selection_df is not None:
-            st.write("### Seleccion Automatica de Estados")
+            table_title(
+                "Seleccion Automatica de Estados",
+                "Compara opciones de cantidad de estados. En general, mira el menor BIC para elegir un modelo simple y util.",
+            )
             select_view = model_selection_df.copy()
             select_view["LogL"] = select_view["LogL"].map(lambda x: f"{x:.2f}")
             select_view["AIC"] = select_view["AIC"].map(lambda x: f"{x:.2f}")
             select_view["BIC"] = select_view["BIC"].map(lambda x: f"{x:.2f}")
             show_light_dataframe(select_view, hide_index=True)
-        st.write("### Diagnostico por Regimen")
+        table_title(
+            "Diagnostico por Regimen",
+            "Resume como se comporta cada regimen. Retorno Prom indica direccion; Volatilidad y Riesgo te dicen cuan brusco puede ser.",
+        )
         view_diag = diagnostico_df.copy()
         for col in ["Retorno Prom (%)", "Volatilidad Prom (%)", "Frecuencia (%)"]:
             view_diag[col] = view_diag[col].map(lambda x: f"{x:.2f}%")
         show_light_dataframe(view_diag, hide_index=True)
 
-        st.write("### Estado Actual vs Estado Probable")
+        table_title(
+            "Estado Actual vs Estado Probable",
+            "Comparacion rapida entre el estado de hoy y el mas probable siguiente. Si cambian mucho, hay chance de giro.",
+        )
         comp_df = pd.DataFrame(
             [
                 {
@@ -981,10 +1027,7 @@ if df is not None:
         )
         show_light_dataframe(comp_df, hide_index=True)
 
-        st.markdown(
-            f'### {eval_freq_title} <span class="help-dot-small" title="{eval_freq_help}">i</span>',
-            unsafe_allow_html=True,
-        )
+        table_title(eval_freq_title, eval_freq_help)
         freq_test_df = pd.DataFrame(
             {
                 "Estado": eval_state_labels,
@@ -1026,7 +1069,10 @@ if df is not None:
         )
         st.plotly_chart(prob_fig, width="stretch")
 
-        st.write("### Desde el Estado de Hoy")
+        table_title(
+            "Desde el Estado de Hoy",
+            "Muestra a que regimenes puede pasar desde el estado actual y con que probabilidad. Sirve para ver escenarios proximos.",
+        )
         top_view = top_transiciones.copy()
         top_view["Probabilidad"] = top_view["Probabilidad"].map(lambda x: f"{x:.2%}")
         show_light_dataframe(top_view, hide_index=True)
@@ -1061,6 +1107,10 @@ if df is not None:
         )
         st.plotly_chart(heatmap, width="stretch")
 
+        table_title(
+            "Tabla de la Matriz",
+            "Cada fila es el estado actual y cada columna el siguiente. Los valores altos marcan transiciones mas probables.",
+        )
         matrix_view = matrix_df.copy()
         for c in matrix_view.columns:
             matrix_view[c] = matrix_view[c].map(lambda x: f"{x:.2%}")
