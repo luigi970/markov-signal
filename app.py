@@ -513,7 +513,7 @@ if df is not None:
         paper_bgcolor='rgba(255,255,255,0.96)', 
         plot_bgcolor='rgba(255,255,255,0.98)',
         font=dict(color='#0f172a', size=15),
-        title_font=dict(color='#0f172a', size=24),
+        title=dict(text=""),
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(
             title="Regímenes",
