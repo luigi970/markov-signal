@@ -195,6 +195,17 @@ st.markdown("""
         padding: 10px 12px;
         white-space: nowrap;
     }
+    .light-code {
+        background: #ffffff;
+        color: #0f172a;
+        border: 1px solid #d7e3f0;
+        border-radius: 10px;
+        padding: 12px 14px;
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 0.92rem;
+        line-height: 1.45;
+        white-space: pre-wrap;
+    }
 
     /* Tablas en modo claro */
     div[data-testid="stDataFrame"] {
@@ -608,7 +619,27 @@ if df is not None:
                 "Probabilidad": probs_manana,
             }
         ).sort_values("Probabilidad", ascending=False)
-        st.bar_chart(prob_df.set_index("Régimen"))
+        prob_fig = go.Figure(
+            data=go.Bar(
+                x=prob_df["Probabilidad"],
+                y=prob_df["Régimen"],
+                orientation="h",
+                marker_color="rgba(0,109,119,0.75)",
+                text=[f"{v:.2%}" for v in prob_df["Probabilidad"]],
+                textposition="outside",
+            )
+        )
+        prob_fig.update_layout(
+            template="plotly_white",
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            margin=dict(l=10, r=10, t=10, b=10),
+            xaxis=dict(tickformat=".2%", gridcolor="rgba(15,23,42,0.12)", range=[0, 1]),
+            yaxis=dict(tickfont=dict(color="#0f172a")),
+            font=dict(color="#0f172a"),
+            height=360,
+        )
+        st.plotly_chart(prob_fig, width="stretch")
 
         st.write("### Desde el Estado de Hoy")
         top_view = top_transiciones.copy()
@@ -639,16 +670,16 @@ if df is not None:
             xaxis_title="Estado mañana",
             yaxis_title="Estado hoy",
             height=430,
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
+            font=dict(color="#0f172a"),
         )
         st.plotly_chart(heatmap, width="stretch")
 
-        styled_matrix = matrix_df.style.format("{:.2%}")
-        if HAS_MATPLOTLIB:
-            try:
-                styled_matrix = styled_matrix.background_gradient(cmap='Blues')
-            except Exception:
-                pass
-        st.dataframe(styled_matrix, width="stretch")
+        matrix_view = matrix_df.copy()
+        for c in matrix_view.columns:
+            matrix_view[c] = matrix_view[c].map(lambda x: f"{x:.2%}")
+        show_light_dataframe(matrix_view, hide_index=False)
 
     with tabs[3]:
         st.write("### Resumen Textual (estilo script)")
@@ -667,7 +698,10 @@ if df is not None:
                 f"volatilidad {row['Volatilidad Prom (%)']:.2f}%, frecuencia {row['Frecuencia (%)']:.2f}% "
                 f"(sesgo {row['Sesgo']}, riesgo {row['Riesgo']})"
             )
-        st.code("\n".join(resumen), language="text")
+        st.markdown(
+            f'<div class="light-code">{"\n".join(resumen)}</div>',
+            unsafe_allow_html=True
+        )
 
 else:
     if data_error and ("YFRateLimitError" in data_error or "Too Many Requests" in data_error):
