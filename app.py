@@ -157,6 +157,37 @@ st.markdown("""
         border-bottom: 2px solid var(--brand) !important;
     }
 
+    /* Tabla HTML clara (independiente del tema Streamlit) */
+    .light-table-wrap {
+        overflow-x: auto;
+        background: #ffffff;
+        border: 1px solid #d7e3f0;
+        border-radius: 10px;
+    }
+    .light-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #ffffff;
+        color: #0f172a;
+        font-size: 0.98rem;
+    }
+    .light-table thead th {
+        background: #f8fafc;
+        color: #0f172a;
+        font-weight: 700;
+        text-align: left;
+        border: 1px solid #dbe3ee;
+        padding: 10px 12px;
+        white-space: nowrap;
+    }
+    .light-table tbody td {
+        background: #ffffff;
+        color: #0f172a;
+        border: 1px solid #e5e7eb;
+        padding: 10px 12px;
+        white-space: nowrap;
+    }
+
     /* Tablas en modo claro */
     div[data-testid="stDataFrame"] {
         background: #ffffff !important;
@@ -339,30 +370,8 @@ def build_state_diagnostics(df, perfiles, n_states):
 
 
 def show_light_dataframe(df, hide_index=True):
-    table_styles = [
-        {
-            "selector": "th",
-            "props": [
-                ("background-color", "#f8fafc"),
-                ("color", "#0f172a"),
-                ("font-weight", "700"),
-                ("border", "1px solid #dbe3ee"),
-            ],
-        },
-        {
-            "selector": "td",
-            "props": [
-                ("background-color", "#ffffff"),
-                ("color", "#0f172a"),
-                ("border", "1px solid #e5e7eb"),
-            ],
-        },
-    ]
-
-    styled = df.style.set_table_styles(table_styles)
-    if hide_index:
-        styled = styled.hide(axis="index")
-    st.dataframe(styled, width="stretch")
+    html = df.to_html(index=not hide_index, classes="light-table", border=0, escape=False)
+    st.markdown(f'<div class="light-table-wrap">{html}</div>', unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 st.sidebar.title("🔍 Configuración")
