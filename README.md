@@ -33,6 +33,19 @@ Permite detectar estados de mercado (alcista, bajista, lateral, alta volatilidad
 - plotly
 - matplotlib (opcional para estilos de tabla)
 
+## Para qué se usa cada librería
+
+- `streamlit`: interfaz web interactiva del dashboard (sidebar, tabs, métricas, tablas).
+- `yfinance`: descarga de datos históricos de mercado desde Yahoo Finance.
+- `pandas`: manipulación y limpieza de datos en `DataFrame`.
+- `numpy`: cálculos numéricos (retornos logarítmicos y operaciones vectorizadas).
+- `time`: esperas entre reintentos cuando hay límite de consultas en Yahoo.
+- `hmmlearn (GaussianHMM)`: detección de regímenes con modelo oculto de Markov.
+- `scikit-learn (StandardScaler)`: normalización de variables antes del entrenamiento.
+- `plotly.graph_objects`: gráficos interactivos.
+- `plotly.subplots (make_subplots)`: composición de gráficos en múltiples paneles.
+- `matplotlib`: soporte opcional para gradientes de estilo en tablas.
+
 ## Estructura del proyecto
 
 - `app.py`: dashboard principal.
@@ -109,4 +122,3 @@ Para interpretación extendida de los regímenes:
 - Agregar backtesting básico de la señal.
 - Integrar fuente de datos alternativa como fallback a Yahoo.
 - Separar lógica de modelo en módulo dedicado (`model.py`) para tests unitarios.
-
