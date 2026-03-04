@@ -85,14 +85,22 @@ st.markdown("""
         background: linear-gradient(180deg, #ffffff 0%, #f4f8ff 100%) !important;
         border-right: 1px solid var(--border) !important;
     }
-    section[data-testid="stSidebar"] h1 {
-        color: var(--brand) !important;
-        font-size: 1.3rem !important;
-    }
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] p {
         color: var(--text-muted) !important;
         font-weight: 600 !important;
+    }
+    .sidebar-brand {
+        color: var(--brand);
+        font-size: 1.25rem;
+        font-weight: 800;
+        margin: 0.2rem 0 0.3rem;
+    }
+    .sidebar-config-title {
+        color: #000000;
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin: 0.1rem 0 0.65rem;
     }
 
     .stTextInput input,
@@ -374,7 +382,8 @@ def show_light_dataframe(df, hide_index=True):
     st.markdown(f'<div class="light-table-wrap">{html}</div>', unsafe_allow_html=True)
 
 # --- SIDEBAR ---
-st.sidebar.title("🔍 Configuración")
+st.sidebar.markdown('<div class="sidebar-brand">Markov Signal</div>', unsafe_allow_html=True)
+st.sidebar.markdown('<div class="sidebar-config-title">Configuración</div>', unsafe_allow_html=True)
 ticker = st.sidebar.text_input("Ticker (Ej: AAPL, BTC-USD, KO)", value="KO").upper()
 periodo = st.sidebar.selectbox("Periodo de datos", ["1y", "2y", "5y", "10y", "max"], index=2)
 n_estados = st.sidebar.slider("Número de Estados (Regímenes)", 2, 5, 3)
