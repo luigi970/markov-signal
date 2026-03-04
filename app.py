@@ -157,6 +157,25 @@ st.markdown("""
         border-bottom: 2px solid var(--brand) !important;
     }
 
+    /* Tablas en modo claro */
+    div[data-testid="stDataFrame"] {
+        background: #ffffff !important;
+        border: 1px solid rgba(15,23,42,0.15) !important;
+        border-radius: 10px !important;
+    }
+    div[data-testid="stDataFrame"] table {
+        background: #ffffff !important;
+        color: #0f172a !important;
+    }
+    div[data-testid="stDataFrame"] thead tr th {
+        background: #f8fafc !important;
+        color: #0f172a !important;
+        font-weight: 700 !important;
+    }
+    div[data-testid="stDataFrame"] tbody tr td {
+        color: #0f172a !important;
+    }
+
     /* Alertas legibles sobre fondos claros (warning/info/success/error) */
     div[data-testid="stAlert"] {
         color: var(--text-main) !important;
@@ -317,6 +336,33 @@ def build_state_diagnostics(df, perfiles, n_states):
             }
         )
     return pd.DataFrame(rows).sort_values("Régimen")
+
+
+def show_light_dataframe(df, hide_index=True):
+    table_styles = [
+        {
+            "selector": "th",
+            "props": [
+                ("background-color", "#f8fafc"),
+                ("color", "#0f172a"),
+                ("font-weight", "700"),
+                ("border", "1px solid #dbe3ee"),
+            ],
+        },
+        {
+            "selector": "td",
+            "props": [
+                ("background-color", "#ffffff"),
+                ("color", "#0f172a"),
+                ("border", "1px solid #e5e7eb"),
+            ],
+        },
+    ]
+
+    styled = df.style.set_table_styles(table_styles)
+    if hide_index:
+        styled = styled.hide(axis="index")
+    st.dataframe(styled, width="stretch")
 
 # --- SIDEBAR ---
 st.sidebar.title("🔍 Configuración")
@@ -511,7 +557,7 @@ if df is not None:
         view_diag = diagnostico_df.copy()
         for col in ["Retorno Prom (%)", "Volatilidad Prom (%)", "Frecuencia (%)"]:
             view_diag[col] = view_diag[col].map(lambda x: f"{x:.2f}%")
-        st.dataframe(view_diag, width="stretch", hide_index=True)
+        show_light_dataframe(view_diag, hide_index=True)
 
         st.write("### Estado Actual vs Estado Probable")
         comp_df = pd.DataFrame(
@@ -534,7 +580,7 @@ if df is not None:
                 },
             ]
         )
-        st.dataframe(comp_df, width="stretch", hide_index=True)
+        show_light_dataframe(comp_df, hide_index=True)
 
     with tabs[1]:
         st.write("### 🔮 Probabilidades para Mañana")
@@ -549,7 +595,7 @@ if df is not None:
         st.write("### Desde el Estado de Hoy")
         top_view = top_transiciones.copy()
         top_view["Probabilidad"] = top_view["Probabilidad"].map(lambda x: f"{x:.2%}")
-        st.dataframe(top_view, width="stretch", hide_index=True)
+        show_light_dataframe(top_view, hide_index=True)
 
     with tabs[2]:
         st.write("### 🔄 Matriz de Transición")
