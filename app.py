@@ -102,6 +102,44 @@ st.markdown("""
         font-weight: 700;
         margin: 0.1rem 0 0.65rem;
     }
+    .sidebar-field-label {
+        color: var(--text-muted);
+        font-weight: 600;
+        margin: 0.35rem 0 0.35rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .sidebar-help-dot {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1rem;
+        height: 1rem;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--brand);
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: help;
+        background: #ffffff;
+    }
+    .help-dot-small {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 0.86rem;
+        height: 0.86rem;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--brand);
+        font-size: 0.64rem;
+        font-weight: 700;
+        cursor: help;
+        background: #ffffff;
+        vertical-align: middle;
+        margin-left: 0.25rem;
+    }
 
     .stTextInput input,
     .stSelectbox div[data-baseweb="select"] > div,
@@ -322,6 +360,17 @@ def get_data(ticker, period="5y"):
     except Exception as e:
         return None, str(e)
 
+def classify_regime(ret, vol, mean_range):
+    if ret > 0.0005 and vol < mean_range * 0.9:
+        return "Alcista Saludable", "#4ade80"
+    if ret < -0.0005 and vol > mean_range * 1.1:
+        return "Panico / Crash", "#f87171"
+    if vol > mean_range * 1.2:
+        return "Extrema Volatilidad", "#fbbf24"
+    if ret < 0:
+        return "Bajista / Desangrado", "#fb923c"
+    return "Lateral / Acumulacion", "#60a5fa"
+
 def train_markov(df, n_states=3):
     features = ['Returns', 'Range', 'Vol_Change']
     scaler = StandardScaler()
@@ -342,27 +391,125 @@ def train_markov(df, n_states=3):
         subset = df[df['Estado'] == i]
         ret = subset['Returns'].mean()
         vol = subset['Range'].mean()
-        
-        # Etiquetado inteligente con colores de alta legibilidad
-        if ret > 0.0005 and vol < df['Range'].mean() * 0.9:
-            tag = "Alcista Saludable"
-            color = "#4ade80" # Green 400
-        elif ret < -0.0005 and vol > df['Range'].mean() * 1.1:
-            tag = "Pánico / Crash"
-            color = "#f87171" # Red 400
-        elif vol > df['Range'].mean() * 1.2:
-            tag = "Extrema Volatilidad"
-            color = "#fbbf24" # Amber 400
-        elif ret < 0:
-            tag = "Bajista / Desangrado"
-            color = "#fb923c" # Orange 400
-        else:
-            tag = "Lateral / Acumulación"
-            color = "#60a5fa" # Blue 400
-            
+        tag, color = classify_regime(ret, vol, df['Range'].mean())
+
         perfiles[i] = {"tag": f"R{i}: {tag}", "color": color, "ret": ret, "vol": vol}
         
     return model, scaler, perfiles
+
+def hmm_num_params(n_states, n_features):
+    startprob = n_states - 1
+    transmat = n_states * (n_states - 1)
+    means = n_states * n_features
+    covars = n_states * (n_features * (n_features + 1) // 2)
+    return startprob + transmat + means + covars
+
+def select_best_n_states(df, candidates=(2, 3, 4, 5), criterion="BIC"):
+    features = ['Returns', 'Range', 'Vol_Change']
+    X = StandardScaler().fit_transform(df[features])
+    n_obs = len(X)
+    n_feat = X.shape[1]
+    rows = []
+
+    for n in candidates:
+        try:
+            model = GaussianHMM(
+                n_components=n,
+                covariance_type="full",
+                n_iter=600,
+                random_state=42
+            )
+            model.fit(X)
+            ll = model.score(X)
+            k = hmm_num_params(n, n_feat)
+            aic = -2 * ll + 2 * k
+            bic = -2 * ll + np.log(max(n_obs, 2)) * k
+            rows.append({"Estados": n, "LogL": ll, "AIC": aic, "BIC": bic})
+        except Exception:
+            continue
+
+    if not rows:
+        return None, None
+
+    df_sel = pd.DataFrame(rows).sort_values("Estados").reset_index(drop=True)
+    metric = "BIC" if criterion.upper() == "BIC" else "AIC"
+    best_n = int(df_sel.sort_values(metric).iloc[0]["Estados"])
+    return best_n, df_sel
+
+def evaluate_walk_forward(df, n_states=3, test_ratio=0.2, min_train_ratio=0.6):
+    features = ['Returns', 'Range', 'Vol_Change']
+    n_obs = len(df)
+    block_size = max(20, int(n_obs * test_ratio / 3))
+    min_train_size = max(n_states * 10, int(n_obs * min_train_ratio))
+
+    if min_train_size + block_size >= n_obs:
+        return None, "Datos insuficientes para validación robusta (walk-forward)."
+
+    ll_values = []
+    conf_values = []
+    last_state_freq = None
+    last_state_labels = None
+    last_test_start = None
+    last_test_end = None
+
+    for train_end in range(min_train_size, n_obs - block_size + 1, block_size):
+        test_end = min(train_end + block_size, n_obs)
+        train_slice = df.iloc[:train_end]
+        test_slice = df.iloc[train_end:test_end]
+        if len(test_slice) == 0:
+            continue
+
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(train_slice[features])
+        X_test = scaler.transform(test_slice[features])
+
+        model = GaussianHMM(
+            n_components=n_states,
+            covariance_type="full",
+            n_iter=300,
+            random_state=42
+        )
+        model.fit(X_train)
+
+        ll_values.append(model.score(X_test) / len(X_test))
+        posterior_test = model.predict_proba(X_test)
+        conf_values.append(posterior_test.max(axis=1).mean())
+
+        states_test = model.predict(X_test)
+        last_state_freq = (
+            pd.Series(states_test)
+            .value_counts(normalize=True)
+            .reindex(range(n_states), fill_value=0.0)
+        )
+        mean_range_ref = train_slice['Range'].mean()
+        labels = []
+        for i in range(n_states):
+            state_subset = test_slice.iloc[np.where(states_test == i)[0]]
+            if state_subset.empty:
+                s_ret = 0.0
+                s_vol = mean_range_ref
+            else:
+                s_ret = state_subset['Returns'].mean()
+                s_vol = state_subset['Range'].mean()
+            s_tag, _ = classify_regime(s_ret, s_vol, mean_range_ref)
+            labels.append(f"WF{i}: {s_tag}")
+        last_state_labels = labels
+        last_test_start = train_end
+        last_test_end = test_end
+
+    if not ll_values or last_state_freq is None or last_state_labels is None or last_test_start is None or last_test_end is None:
+        return None, "No se pudieron generar ventanas de validación walk-forward."
+
+    return {
+        "windows": len(ll_values),
+        "mean_ll": float(np.mean(ll_values)),
+        "worst_ll": float(np.min(ll_values)),
+        "mean_conf": float(np.mean(conf_values)),
+        "last_test_start": int(last_test_start),
+        "last_test_end": int(last_test_end),
+        "state_freq_last": last_state_freq,
+        "state_labels_last": last_state_labels,
+    }, None
 
 def build_state_diagnostics(df, perfiles, n_states):
     rows = []
@@ -396,11 +543,64 @@ def show_light_dataframe(df, hide_index=True):
 st.sidebar.markdown('<div class="sidebar-brand">Markov Signal</div>', unsafe_allow_html=True)
 st.sidebar.markdown('<div class="sidebar-config-title">Configuración</div>', unsafe_allow_html=True)
 ticker = st.sidebar.text_input("Ticker (Ej: AAPL, BTC-USD, KO)", value="KO").upper()
-periodo = st.sidebar.selectbox("Periodo de datos", ["1y", "2y", "5y", "10y", "max"], index=2)
-n_estados = st.sidebar.slider("Número de Estados (Regímenes)", 2, 5, 3)
+periodo = st.sidebar.selectbox(
+    "Periodo de datos",
+    ["5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "max"],
+    index=6,
+)
+st.sidebar.markdown(
+    "<div class=\"sidebar-field-label\">Seleccion de estados <span class=\"sidebar-help-dot\" title=\"Manual: vos elegis 2-5. Auto: prueba 2,3,4,5 y elige por AIC/BIC.\">i</span></div>",
+    unsafe_allow_html=True,
+)
+state_selection_mode = st.sidebar.selectbox(
+    "Seleccion de estados",
+    ["Manual", "Auto (AIC/BIC)"],
+    index=1,
+    label_visibility="collapsed",
+)
+if state_selection_mode == "Manual":
+    n_estados = st.sidebar.slider("Numero de estados (regimenes)", 2, 5, 3)
+    auto_criterion = "BIC"
+else:
+    st.sidebar.markdown(
+        "<div class=\"sidebar-field-label\">Criterio automatico (AIC/BIC) <span class=\"sidebar-help-dot\" title=\"AIC y BIC comparan modelos penalizando complejidad. Menor valor = mejor equilibrio entre ajuste y simplicidad. BIC penaliza mas y suele elegir modelos mas simples.\">i</span></div>",
+        unsafe_allow_html=True,
+    )
+    auto_criterion = st.sidebar.selectbox("Criterio automatico", ["BIC", "AIC"], index=0)
+    n_estados = 3
+st.sidebar.markdown(
+    '<div class="sidebar-field-label">Tipo de validación <span class="sidebar-help-dot" title="Rápida: una sola partición train/test.&#10;Robusta: varias pruebas en el tiempo (walk-forward), más exigente y realista.">i</span></div>',
+    unsafe_allow_html=True,
+)
+validation_mode = st.sidebar.selectbox(
+    "Tipo de validación",
+    ["Rápida (train/test)", "Robusta (walk-forward)"],
+    index=1,
+    label_visibility="collapsed",
+)
+st.sidebar.markdown(
+    '<div class="sidebar-field-label">Tamaño de prueba (OOS) <span class="sidebar-help-dot" title="Define cuánto de los datos se usa para probar el modelo en datos no vistos. Más alto = prueba más dura.">i</span></div>',
+    unsafe_allow_html=True,
+)
+test_ratio = st.sidebar.slider("Porción de test (OOS)", 0.10, 0.40, 0.20, 0.05, label_visibility="collapsed")
+st.sidebar.markdown(
+    '<div class="sidebar-field-label">Predicción de mañana <span class="sidebar-help-dot" title="Hard: usa solo el estado más probable de hoy y toma su fila de transición.&#10;Soft: usa la distribución completa de estados de hoy y la proyecta con la matriz de transición.">i</span></div>',
+    unsafe_allow_html=True,
+)
+modo_prediccion = st.sidebar.selectbox(
+    "Predicción de mañana",
+    ["Transición desde estado actual (hard)", "Transición desde distribución posterior (soft)"],
+    index=1,
+    label_visibility="collapsed",
+)
 
 st.sidebar.markdown("---")
-st.sidebar.info("Este dashboard utiliza Modelos Ocultos de Markov (HMM) para detectar cambios en la estructura del mercado.")
+st.sidebar.info(
+    "Este dashboard utiliza Modelos Ocultos de Markov (HMM) para detectar cambios en la estructura del mercado.\n\n"
+    "Cuándo usar cada validación:\n"
+    "- Rápida (train/test): para revisar ideas rápido.\n"
+    "- Robusta (walk-forward): para uso real, porque prueba varias veces en el tiempo y es más exigente."
+)
 
 # --- MAIN CONTENT ---
 st.markdown(
@@ -416,19 +616,109 @@ st.markdown(
 df, data_error = get_data(ticker, periodo)
 
 if df is not None:
-    model, scaler, perfiles = train_markov(df, n_estados)
-    diagnostico_df = build_state_diagnostics(df, perfiles, n_estados)
-    
-    # Predicción para mañana
     features = ['Returns', 'Range', 'Vol_Change']
-    ultima_fila = scaler.transform(df[features].iloc[-1].values.reshape(1, -1))
-    probs_manana = model.predict_proba(ultima_fila)[0]
-    estado_hoy = df['Estado'].iloc[-1]
+    estado_freq_test = pd.Series([0.0] * n_estados, index=range(n_estados))
+    eval_freq_title = "Frecuencia de Estados en Test (OOS)"
+    eval_state_labels = [f"R{i}" for i in range(n_estados)]
+    eval_freq_help = (
+        "Que mirar: esta tabla muestra cuanto aparece cada estado en la validacion. "
+        "Importante: en walk-forward los IDs (WF0/WF1/...) son internos de ese bloque y "
+        "no equivalen 1:1 con R0/R1/... del modelo actual."
+    )
+    model_selection_df = None
+
+    if state_selection_mode == "Auto (AIC/BIC)":
+        best_n, model_selection_df = select_best_n_states(
+            df,
+            candidates=(2, 3, 4, 5),
+            criterion=auto_criterion,
+        )
+        if best_n is not None:
+            n_estados = best_n
+            estado_freq_test = pd.Series([0.0] * n_estados, index=range(n_estados))
+            eval_state_labels = [f"R{i}" for i in range(n_estados)]
+        else:
+            st.warning("No se pudo seleccionar estados en automático. Se usa 3 por defecto.")
+
+    if validation_mode == "Rápida (train/test)":
+        split_idx = int(len(df) * (1 - test_ratio))
+        split_idx = max(split_idx, n_estados * 8)
+        split_idx = min(split_idx, len(df) - max(30, n_estados * 4))
+        if split_idx <= n_estados * 6 or split_idx >= len(df):
+            st.error("No hay suficientes datos para separar train/test de forma robusta. Probá un periodo mayor o menos estados.")
+            st.stop()
+
+        df_train_fit = df.iloc[:split_idx].copy()
+        df_test_oos = df.iloc[split_idx:].copy()
+        model, scaler, perfiles = train_markov(df_train_fit, n_estados)
+
+        # Aplicamos el modelo de train sobre toda la serie para ver estados y señal actual.
+        X_all = scaler.transform(df[features].values)
+        df['Estado'] = model.predict(X_all)
+        posterior_all = model.predict_proba(X_all)
+        diagnostico_df = build_state_diagnostics(df, perfiles, n_estados)
+
+        X_train = scaler.transform(df_train_fit[features].values)
+        X_test = scaler.transform(df_test_oos[features].values)
+        train_ll = model.score(X_train) / len(X_train)
+        test_ll = model.score(X_test) / len(X_test)
+        estado_freq_test = (
+            df.iloc[split_idx:]['Estado']
+            .value_counts(normalize=True)
+            .reindex(range(n_estados), fill_value=0.0)
+        )
+
+        valid_count_label = "Datos Train/Test"
+        valid_count_value = f"{len(df_train_fit)} / {len(df_test_oos)}"
+        valid_ll_value = test_ll
+        valid_ll_delta = f"train {train_ll:.4f}"
+        valid_conf_value = posterior_all[split_idx:, :].max(axis=1).mean()
+        valid_caption = (
+            f"Modo rápido: train hasta {df.index[split_idx - 1].date()} | "
+            f"test desde {df.index[split_idx].date()}."
+        )
+        eval_state_labels = [perfiles[i]["tag"] for i in range(n_estados)]
+    else:
+        wf_stats, wf_error = evaluate_walk_forward(df, n_states=n_estados, test_ratio=test_ratio)
+        if wf_error:
+            st.error(wf_error)
+            st.stop()
+
+        # Modelo operativo final entrenado con toda la historia disponible.
+        model, scaler, perfiles = train_markov(df, n_estados)
+        X_all = scaler.transform(df[features].values)
+        posterior_all = model.predict_proba(X_all)
+        diagnostico_df = build_state_diagnostics(df, perfiles, n_estados)
+
+        estado_freq_test = wf_stats["state_freq_last"]
+        eval_freq_title = "Frecuencia en el último bloque walk-forward"
+        eval_state_labels = wf_stats["state_labels_last"]
+        valid_count_label = "Bloques evaluados"
+        valid_count_value = str(wf_stats["windows"])
+        valid_ll_value = wf_stats["mean_ll"]
+        valid_ll_delta = f"peor {wf_stats['worst_ll']:.4f}"
+        valid_conf_value = wf_stats["mean_conf"]
+        valid_caption = (
+            f"Modo robusto: {wf_stats['windows']} bloques. "
+            f"Último bloque validado: {df.index[wf_stats['last_test_start']].date()} "
+            f"a {df.index[wf_stats['last_test_end'] - 1].date()}."
+        )
+
+    # Predicción para mañana
+    posterior_hoy = posterior_all[-1]
+    estado_hoy = int(df['Estado'].iloc[-1])
+    trans_matrix = model.transmat_
+    if modo_prediccion == "Transición desde estado actual (hard)":
+        probs_manana = trans_matrix[estado_hoy]
+        metodo_prediccion_label = "Hard (solo el estado más probable de hoy)"
+    else:
+        probs_manana = posterior_hoy @ trans_matrix
+        metodo_prediccion_label = "Soft (mezcla de todos los estados de hoy)"
+    probs_manana = np.asarray(probs_manana)
     estado_predicho = np.argmax(probs_manana)
     confianza = probs_manana[estado_predicho]
-    
+
     # Probabilidades de transición
-    trans_matrix = model.transmat_
     p_permanecer = trans_matrix[estado_hoy][estado_hoy]
     duracion_media = 1 / (1 - p_permanecer) if p_permanecer < 1 else 99
     top_transiciones = (
@@ -456,31 +746,72 @@ if df is not None:
     with col4:
         st.metric("Confianza Modelo", f"{confianza:.2%}")
 
+    st.write("### Validación (datos no vistos)")
+    v1, v2, v3 = st.columns(3)
+    with v1:
+        st.metric(valid_count_label, valid_count_value)
+    with v2:
+        st.metric("Calidad promedio", f"{valid_ll_value:.4f}", delta=valid_ll_delta)
+    with v3:
+        st.metric("Confianza media", f"{valid_conf_value:.2%}")
+    st.caption(valid_caption)
+    if state_selection_mode == "Auto (AIC/BIC)":
+        st.caption(f"Estados elegidos en auto: {n_estados} (criterio {auto_criterion}).")
+    else:
+        st.caption(f"Estados elegidos en manual: {n_estados}.")
+
     st.write("### Lectura Rápida")
     st.markdown(
         f"""
         - **Hoy** el mercado está en **{perfiles[estado_hoy]['tag']}** (sesgo: **{estado_hoy_row['Sesgo']}**, riesgo: **{estado_hoy_row['Riesgo']}**).
         - **Mañana** el régimen más probable es **{perfiles[estado_predicho]['tag']}** con **{confianza:.2%}** de confianza.
+        - **Método de predicción**: {metodo_prediccion_label}.
         - Si el régimen actual se mantiene, su duración media estimada es de **{duracion_media:.2f} días**.
         """
     )
-
     st.write("### Señal Operativa")
     if estado_pred_row["Sesgo"] == "Alcista" and estado_pred_row["Riesgo"] == "Bajo" and confianza >= 0.55:
-        st.success(
-            f"Sesgo operativo: **Comprar / Aumentar exposición**. "
-            f"Régimen probable {perfiles[estado_predicho]['tag']} con confianza {confianza:.2%}."
-        )
+        accion_base = "Comprar / Aumentar exposición"
+        nivel_base = "fuerte"
     elif estado_pred_row["Sesgo"] == "Bajista" and confianza >= 0.55:
-        st.warning(
-            f"Sesgo operativo: **Reducir exposición / Cobertura**. "
-            f"Régimen probable {perfiles[estado_predicho]['tag']} con confianza {confianza:.2%}."
-        )
+        accion_base = "Reducir exposición / Cobertura"
+        nivel_base = "fuerte"
     else:
-        st.info(
-            f"Sesgo operativo: **Esperar / Neutral**. "
-            f"No hay señal fuerte (confianza {confianza:.2%} o régimen mixto)."
-        )
+        accion_base = "Esperar / Neutral"
+        nivel_base = "debil"
+
+    if valid_conf_value >= 0.58:
+        filtro_robustez = "alto"
+    elif valid_conf_value >= 0.50:
+        filtro_robustez = "medio"
+    else:
+        filtro_robustez = "bajo"
+
+    if nivel_base == "debil":
+        accion_final = "Esperar / Neutral"
+        resumen_final = "La señal base no es suficientemente clara."
+    elif filtro_robustez == "bajo":
+        accion_final = "Cautela / Tama?o peque?o"
+        resumen_final = "La validaci?n en datos no vistos est? floja."
+    else:
+        accion_final = accion_base
+        resumen_final = "La señal base est? acompa?ada por validaci?n aceptable."
+
+    st.markdown(
+        f"- **Señal base (R)**: {accion_base} (confianza de mañana: **{confianza:.2%}**).\n"
+        f"- **Filtro de robustez ({validation_mode})**: nivel **{filtro_robustez}** "
+        f"(confianza media OOS: **{valid_conf_value:.2%}**).\n"
+        f"- **Conclusión final**: **{accion_final}**. {resumen_final}"
+    )
+
+    if accion_final == "Comprar / Aumentar exposición":
+        st.success(f"Conclusión final: **{accion_final}**")
+    elif accion_final == "Reducir exposición / Cobertura":
+        st.warning(f"Conclusión final: **{accion_final}**")
+    elif accion_final == "Cautela / Tama?o peque?o":
+        st.warning(f"Conclusión final: **{accion_final}**")
+    else:
+        st.info(f"Conclusión final: **{accion_final}**")
 
     # GRAFICO PRINCIPAL
     df_plot = df.copy()
@@ -582,7 +913,14 @@ if df is not None:
     tabs = st.tabs(["Diagnóstico", "Probabilidades", "Matriz", "Modo Script"])
 
     with tabs[0]:
-        st.write("### Diagnóstico por Régimen")
+        if model_selection_df is not None:
+            st.write("### Seleccion Automatica de Estados")
+            select_view = model_selection_df.copy()
+            select_view["LogL"] = select_view["LogL"].map(lambda x: f"{x:.2f}")
+            select_view["AIC"] = select_view["AIC"].map(lambda x: f"{x:.2f}")
+            select_view["BIC"] = select_view["BIC"].map(lambda x: f"{x:.2f}")
+            show_light_dataframe(select_view, hide_index=True)
+        st.write("### Diagnostico por Regimen")
         view_diag = diagnostico_df.copy()
         for col in ["Retorno Prom (%)", "Volatilidad Prom (%)", "Frecuencia (%)"]:
             view_diag[col] = view_diag[col].map(lambda x: f"{x:.2f}%")
@@ -611,8 +949,23 @@ if df is not None:
         )
         show_light_dataframe(comp_df, hide_index=True)
 
+        st.markdown(
+            f'### {eval_freq_title} <span class="help-dot-small" title="{eval_freq_help}">i</span>',
+            unsafe_allow_html=True,
+        )
+        freq_test_df = pd.DataFrame(
+            {
+                "Estado": eval_state_labels,
+                "Frecuencia OOS": estado_freq_test.values,
+            }
+        )
+        freq_test_df["Frecuencia OOS"] = freq_test_df["Frecuencia OOS"].map(lambda x: f"{x:.2%}")
+        show_light_dataframe(freq_test_df, hide_index=True)
+        st.caption("R*: estados del modelo operativo actual. WF*: estados del bloque de validacion walk-forward.")
+
     with tabs[1]:
         st.write("### 🔮 Probabilidades para Mañana")
+        st.caption(f"Método activo: {metodo_prediccion_label}")
         prob_df = pd.DataFrame(
             {
                 "Régimen": [perfiles[i]["tag"] for i in range(n_estados)],
